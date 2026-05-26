@@ -44,7 +44,8 @@ TRITONBENCH_REPO = "https://github.com/thunlp/TritonBench.git"
 
 # Cheapest Modal GPU (compute capability 7.5 — Triton requires >= 7.0).
 # Override at runtime via `--gpu A10` etc. on the local entrypoint.
-DEFAULT_GPU = "T4"
+DEFAULT_GPU = os.environ.get("TRITONBENCH_GPU", "T4")
+DEFAULT_EVAL_MEMORY_MB = int(os.environ.get("TRITONBENCH_EVAL_MEMORY_MB", "32768"))
 
 VOLUME_NAME = "tritonbench-t-data"
 DATA_DIR = "/data"           # mount point of the Modal Volume in the container
@@ -90,7 +91,7 @@ PATCH_EXE_ACC = (
 
 # multiprocess_gpu_run.py — assumes 8 GPUs; we have one.
 PATCH_PERF = (
-    f"""sed -i 's|^gpu_count = .*|gpu_count = 1|' """
+    rf"""sed -i -e 's|^gpu_count = .*|gpu_count = 1|' -e 's|^timeout = .*|timeout = 420|' -e 's|^[[:space:]]*os\.killpg(os\.getpgid(process\.pid), signal\.SIGKILL)|            process.kill()|' """
     f"""{REPO_DIR}/performance_metrics/perf_T/run_bench/multiprocess_gpu_run.py"""
 )
 
@@ -109,6 +110,7 @@ image = (
         "numpy<2",
         "anthropic>=0.40",
         "openai>=1.50",
+        "azure-identity>=1.17",
     )
     .run_commands(f"git clone --depth 1 {TRITONBENCH_REPO} {REPO_DIR}")
     .run_commands(PATCH_CALL_ACC, PATCH_EXE_ACC, PATCH_PERF)
@@ -185,7 +187,39 @@ def _gen_openai(messages: list[dict], model: str) -> str:
     return resp.choices[0].message.content
 
 
-_GENERATORS = {"anthropic": _gen_anthropic, "openai": _gen_openai}
+def _gen_azure_openai(messages: list[dict], model: str) -> str:
+    from openai import OpenAI
+
+    base_url = os.environ.get("AZURE_OPENAI_BASE_URL") or os.environ.get(
+        "AZURE_OPENAI_ENDPOINT"
+    )
+    if not base_url:
+        raise ValueError(
+            "set AZURE_OPENAI_BASE_URL to your Azure endpoint, e.g. "
+            "https://.../openai/v1"
+        )
+
+    api_key = os.environ.get("AZURE_OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError(
+            "set AZURE_OPENAI_API_KEY to your Azure OpenAI subscription key"
+        )
+
+    client = OpenAI(base_url=base_url, api_key=api_key)
+
+    resp = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        max_completion_tokens=8192,
+    )
+    return resp.choices[0].message.content
+
+
+_GENERATORS = {
+    "anthropic": _gen_anthropic,
+    "openai": _gen_openai,
+    "azure": _gen_azure_openai,
+}
 
 
 def _extract_code(text: str) -> str:
@@ -276,6 +310,7 @@ def generate_predictions(
 
 @app.function(
     gpu=DEFAULT_GPU,
+    memory=DEFAULT_EVAL_MEMORY_MB,
     timeout=60 * 60 * 6,
     volumes={DATA_DIR: data_volume},
 )
@@ -428,7 +463,7 @@ def main(
     Args:
         predictions: path to a local predictions.jsonl. If set, generation is
             skipped and this file is uploaded to the volume.
-        provider: ``anthropic`` or ``openai``.
+        provider: ``anthropic``, ``openai``, or ``azure``.
         model: model id for the chosen provider.
         dataset: ``simp`` (simple) or ``comp`` (complex) Alpaca instructions.
         limit: only generate the first N items (useful for smoke tests).

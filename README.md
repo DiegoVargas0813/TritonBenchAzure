@@ -32,17 +32,11 @@ pip install -r requirements-local.txt
 modal setup                       # opens a browser to link your account
 
 # 2. Pick ONE provider and add its key as a Modal secret named "tritonbench-llm".
-#    The function reads whichever key is present.
 modal secret create tritonbench-llm ANTHROPIC_API_KEY=sk-ant-...
 # or
 modal secret create tritonbench-llm OPENAI_API_KEY=sk-...
-```
-
-**Already have a secret with a different name?** Point the app at it once with
-an environment variable instead of editing code:
-
-```bash
-export TRITONBENCH_LLM_SECRET=openai-secret    # or whatever yours is called
+# or Azure AI / Azure OpenAI
+modal secret create tritonbench-llm AZURE_OPENAI_BASE_URL=https://a01635782-1450-resource.services.ai.azure.com/openai/v1 AZURE_OPENAI_API_KEY=...
 ```
 
 You only need the secret if you want this project to **generate** the Triton
@@ -64,6 +58,9 @@ modal run modal_app.py::main
 
 # Use OpenAI instead
 modal run modal_app.py::main --provider openai --model gpt-4o-mini
+
+# Use Azure AI / Azure OpenAI instead. Here, --model is your deployment name.
+modal run modal_app.py::main --provider azure --model gpt-4.1-mini
 
 # Use the "complex" instruction variant
 modal run modal_app.py::main --dataset comp
@@ -131,6 +128,22 @@ T4 is the cheapest GPU but has no bf16 tensor cores, so a handful of operators
 that rely on bf16 will fail at phase 1. To rerun on something beefier, edit
 `DEFAULT_GPU` near the top of `modal_app.py` to e.g. `"L4"` ($0.80/hr) or
 `"A10"` ($1.10/hr) and rerun.
+
+Or set env vars at run time (no code edits):
+
+```bash
+# PowerShell
+$env:TRITONBENCH_GPU="A10"
+$env:TRITONBENCH_EVAL_MEMORY_MB="65536"
+modal run modal_app.py::evaluate_only --predictions ./my_predictions.jsonl
+
+# Bash
+TRITONBENCH_GPU=A10 TRITONBENCH_EVAL_MEMORY_MB=65536 \
+  modal run modal_app.py::evaluate_only --predictions ./my_predictions.jsonl
+```
+
+`TRITONBENCH_GPU` defaults to `T4` and `TRITONBENCH_EVAL_MEMORY_MB` defaults
+to `32768`.
 
 ---
 
