@@ -110,7 +110,6 @@ image = (
         "numpy<2",
         "anthropic>=0.40",
         "openai>=1.50",
-        "azure-identity>=1.17",
     )
     .run_commands(f"git clone --depth 1 {TRITONBENCH_REPO} {REPO_DIR}")
     .run_commands(PATCH_CALL_ACC, PATCH_EXE_ACC, PATCH_PERF)
@@ -188,16 +187,20 @@ def _gen_openai(messages: list[dict], model: str) -> str:
 
 
 def _gen_azure_openai(messages: list[dict], model: str) -> str:
-    from openai import OpenAI
+    from openai import AzureOpenAI
 
-    base_url = os.environ.get("AZURE_OPENAI_BASE_URL") or os.environ.get(
-        "AZURE_OPENAI_ENDPOINT"
+    endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT") or os.environ.get(
+        "AZURE_OPENAI_BASE_URL"
     )
-    if not base_url:
+    if not endpoint:
         raise ValueError(
-            "set AZURE_OPENAI_BASE_URL to your Azure endpoint, e.g. "
-            "https://.../openai/v1"
+            "set AZURE_OPENAI_ENDPOINT (preferred) or AZURE_OPENAI_BASE_URL to "
+            "your Azure OpenAI resource endpoint"
         )
+
+    endpoint = endpoint.rstrip("/")
+    if endpoint.endswith("/openai/v1"):
+        endpoint = endpoint[: -len("/openai/v1")]
 
     api_key = os.environ.get("AZURE_OPENAI_API_KEY")
     if not api_key:
@@ -205,7 +208,12 @@ def _gen_azure_openai(messages: list[dict], model: str) -> str:
             "set AZURE_OPENAI_API_KEY to your Azure OpenAI subscription key"
         )
 
-    client = OpenAI(base_url=base_url, api_key=api_key)
+    api_version = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-10-21")
+    client = AzureOpenAI(
+        azure_endpoint=endpoint,
+        api_key=api_key,
+        api_version=api_version,
+    )
 
     resp = client.chat.completions.create(
         model=model,

@@ -35,8 +35,9 @@ modal setup                       # opens a browser to link your account
 modal secret create tritonbench-llm ANTHROPIC_API_KEY=sk-ant-...
 # or
 modal secret create tritonbench-llm OPENAI_API_KEY=sk-...
-# or Azure AI / Azure OpenAI
-modal secret create tritonbench-llm AZURE_OPENAI_BASE_URL=https://a01635782-1450-resource.services.ai.azure.com/openai/v1 AZURE_OPENAI_API_KEY=...
+# or Azure OpenAI deployment access. AZURE_OPENAI_ENDPOINT is preferred,
+# but AZURE_OPENAI_BASE_URL still works if it points at /openai/v1.
+modal secret create tritonbench-llm AZURE_OPENAI_ENDPOINT=https://<resource>.openai.azure.com AZURE_OPENAI_API_KEY=... AZURE_OPENAI_API_VERSION=2024-10-21
 ```
 
 You only need the secret if you want this project to **generate** the Triton
@@ -59,7 +60,7 @@ modal run modal_app.py::main
 # Use OpenAI instead
 modal run modal_app.py::main --provider openai --model gpt-4o-mini
 
-# Use Azure AI / Azure OpenAI instead. Here, --model is your deployment name.
+# Use Azure OpenAI instead. Here, --model is your deployment name.
 modal run modal_app.py::main --provider azure --model gpt-4.1-mini
 
 # Use the "complex" instruction variant
