@@ -1,0 +1,19 @@
+@triton.jit
+def add_kernel(x_ptr, y_ptr, out_ptr, n, BLOCK: tl.constexpr):
+    pid = tl.program_id(axis=0)
+    offsets = pid * BLOCK + tl.arange(0, BLOCK)
+    mask = offsets < n
+    if pid == 0:
+        acc = 0.0
+    elif pid > 10:
+        acc = 1.0
+    else:
+        acc = -1.0
+    for i in range(0, n):
+        acc = acc + i
+    while acc > 0:
+        acc = acc - 1
+    x = tl.load(x_ptr + offsets, mask=mask)
+    y = tl.load(y_ptr + offsets, mask=mask)
+    tl.store(out_ptr + offsets, x + y, mask=mask)
+    return
